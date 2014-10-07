@@ -9,7 +9,7 @@ In order to use these functions with YAIM  it's just needed to copy them to the 
 
 /opt/glite/yaim/bin/yaim -r -s "path to site-info.def file" -f "function"
 
-"function" = config_DPM_puppet_head | config_DPM_puppet_disk | config_LFC_puppet
+where "function" = config_DPM_puppet_head | config_DPM_puppet_disk | config_LFC_puppet
 
 config_DPM_puppet_head, config_DPM_puppet_disk, config_LFC_puppet are shell scripts in which puppet variable values are replaced by YAIM variable names.
 
