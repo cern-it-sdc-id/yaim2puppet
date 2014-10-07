@@ -14,7 +14,9 @@ In order to use these functions with YAIM  it just needed to copy them to the YA
 config_DPM_puppet_head, config_DPM_puppet_disk, config_LFC_puppet are shell scripts in which puppet variable values are replaced by YAIM variable names.
 
 
+Author 
 
+Grigorii Latyshev
 
-
+grigorii.latyshev@cern.ch 
 
