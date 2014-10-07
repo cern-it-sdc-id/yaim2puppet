@@ -1,0 +1,105 @@
+#!/bin/bash
+
+function Def(){
+[ 'x$1' = 'x' ] && echo -n $2 || echo -n $1
+}
+
+function config_LFC_puppet(){
+echo -n "Type output filename: "
+read FILE
+[ "x$FILE" = "x" ] && FILE="/etc/puppet/y2p-lfc.pp"
+echo "Output file: $FILE"
+
+echo """
+#
+# This is an example configuration for the LFC service.
+#
+# You can check the puppet module 'lcgdm' for any additional options available.
+# !! Please replace the placeholders for usernames and passwords !!
+#
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+# !!! PLEASE NOTE THAT THIS DOCUMENT WAS GENERATED AUTOMATICALLY !!!
+# !!!               AND YOU NEED TO CHECK IT                     !!!
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+#
+
+
+
+Class[Lcgdm::Ns::Service] -> Class[Lcgdm::Ns::Client]
+Class[Lcgdm::Ns::Service] -> Class[Dmlite::Plugins::Adapter::Install]
+Class[Dmlite::Plugins::Adapter::Install] ~> Class[Dmlite::Dav::Service]
+
+#
+# The basic lcgdm configuration (these defaults are usually fine).
+#
+class{'lcgdm::base::config':
+  cert    => 'lfccert.pem',
+  certkey => 'lfckey.pem',
+  user    => '`Def $LFCMGR_USER lfcmgr`'
+}
+class{'lcgdm::base::install':}
+
+#
+# Nameserver configuration.
+#
+# You should provide the db flavor (mysql or oracle), along with the connection
+# details.
+#
+class{'lcgdm::ns::config':
+  flavor          => 'lfc',
+  dbflavor        => 'oracle',    # mysql or oracle
+  dbuser          => '`Def $LFC_DB_USER "USER"`',      # database username
+  dbpass          => '`Def $LFC_DB_PASSWORD "PASSWORD"`',  # database password
+  dbhost          => '`Def $LFC_DB_HOST "HOST"`',      # database host/tns
+  active          => 'yes',       # yes or no
+  readonly        => 'no',        # yes or no
+  disableautovids => 'no',        # yes or no
+  ulimitn         => 4096,        # ulimit number
+  coredump        => 'no',        # yes or no
+  numthreads      => 20           # number of ns threads
+}
+class{'lcgdm::ns::install':}
+class{'lcgdm::ns::service':}
+class{'lcgdm::ns::client': flavor => 'lfc' }
+
+#
+# Entries in the shift.conf file, you can add in 'host' below the list of
+# machines that the LFC should trust (if any).
+#
+class{'lcgdm::shift::config':}
+lcgdm::shift::trust_entry{'lfc':
+  component => 'LFC',
+}
+#lcgdm::shift::trust_value{'lfc-localhost':
+#  component => 'LFC',
+#  host      => '*',
+#}
+#
+# Enable the dmlite adapter plugin.
+#
+class{
+  'dmlite::plugins::adapter::config':
+    ns_host                 => '`Def $LFC_DB_HOST $(hostname -f)`',   # the hostname of the lfc daemon
+    connection_timeout      => 10,
+    enable_ns               => true,
+    enable_dpm              => false,
+    enable_io               => false
+}
+class{'dmlite::plugins::adapter::install':}
+
+#
+# Frontends based on dmlite.
+#
+class{'dmlite::dav::lfc':}
+
+""" > $FILE
+
+echo """
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+# !!! PLEASE NOTE THAT THIS DOCUMENT WAS GENERATED AUTOMATICALLY !!!
+# !!!               AND YOU NEED TO CHECK IT                     !!!
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+#
+"""
+
+}

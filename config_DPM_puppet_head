@@ -1,0 +1,240 @@
+#!/bin/bash
+
+function Def(){
+[ "x$1x" = "xx" ] && echo -n $2 || echo -n $1
+}
+
+function config_DPM_puppet_head(){
+
+echo -n "Type output filename: "
+read FILE
+[ "x$FILE" == "x" ] && FILE="`/etc/puppet/y2p-dpm-head.pp`"
+echo "Output file: $FILE"
+echo """
+#
+# This is an configuration for a DPM Head Node.
+#
+# You can check the puppet modules 'lcgdm' and 'dmlite' for any additional options available.
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+# !!! PLEASE NOTE THAT THIS DOCUMENT WAS GENERATED AUTOMATICALLY !!!
+# !!!               AND YOU NEED TO CHECK IT                     !!!
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+#
+
+#
+# Set inter-module dependencies
+#
+#Class[Mysql::Server] -> Class[Lcgdm::Ns::Service]
+Class[Lcgdm::Dpm::Service] -> Lcgdm::Ns::Domain <| |>
+Class[Lcgdm::Dpm::Service] -> Lcgdm::Ns::Domain <| |>
+Class[Lcgdm::Ns::Service] -> Class[Lcgdm::Dpm::Service]
+#Class[Lcgdm::Dpm::Service] -> Lcgdm::Dpm::Pool <| |>
+Class[Lcgdm::Ns::Service] -> Class[Lcgdm::Ns::Client]
+Class[Lcgdm::Dpm::Service] -> Class[Lcgdm::Rfio::Service]
+Class[Lcgdm::Dpm::Service] -> Class[Dmlite::Plugins::Adapter::Install]
+Class[Dmlite::Plugins::Adapter::Install] ~> Class[Dmlite::Srm::Service]
+Class[Dmlite::Plugins::Adapter::Install] ~> Class[Dmlite::Nfs::Service]
+Class[Dmlite::Plugins::Adapter::Install] ~> Class[Dmlite::Gridftp::Service]
+Class[Dmlite::Plugins::Adapter::Install] ~> Class[Dmlite::Dav::Service]
+Class[Dmlite::Plugins::Mysql::Install] ~> Class[Dmlite::Srm::Service]
+Class[Dmlite::Plugins::Mysql::Install] ~> Class[Dmlite::Nfs::Service]
+Class[Dmlite::Plugins::Mysql::Install] ~> Class[Dmlite::Gridftp::Service]
+Class[Dmlite::Plugins::Mysql::Install] ~> Class[Dmlite::Dav::Service]
+
+#
+# MySQL server setup - by default it's not installed, as it could be remote.
+#
+#class{'mysql::server':
+#  enabled     => true,
+#  config_hash => {'root_password' => '`Def $MYSQL_PASSWORD "undef"`'}
+#}
+
+#
+# The basic lcgdm configuration (these defaults are usually fine).
+# 
+class{'lcgdm::base::config':
+    user => '`Def $DPMMGR_USER dpmmgr`',
+    uid  => '`Def $DPMMGR_UID 151`',
+    gid  => '`Def $DPMMGR_GID 151`',
+    cert => '`Def $(basename $X509_HOST_CERT) "dpmcert.pem"`',
+    certkey => '`Def $(basename $X509_HOST_KEY) "dpmkey.pem"`',
+}
+class{'lcgdm::base::install':}
+
+#
+# Nameserver configuration.
+#
+# You should provide the db flavor (mysql or oracle), along with the connection
+# details.
+#
+class{'lcgdm::ns::config':
+  flavor          => 'dpns',
+  dbflavor        => 'mysql',       # mysql or oracle
+  dbuser          => '$DPM_DB_USER',        # database username
+  dbpass          => '$DPM_DB_PASSWORD',    # database password
+  dbhost          => '`Def $DPM_DB_HOST "localhost"`',        # database host/tns
+  dbmanage        => false,         # if true, creates schema and users
+  active          => 'yes',         # yes or no
+  readonly        => 'no',          # yes or no
+  disableautovids => 'no',          # yes or no
+  ulimitn         => 4096,          # ulimit number
+  coredump        => 'no',          # yes or no
+  numthreads      => 20             # number of ns threads
+}
+class{'lcgdm::ns::install':}
+class{'lcgdm::ns::service':}
+class{'lcgdm::ns::client':
+    flavor  => 'dpns',
+    dpmhost => '`Def $DPM_DB_HOST $(hostname -f)`'
+}
+
+#
+# DPM service configuration.
+#
+class{'lcgdm::dpm::config':
+  dbflavor    => 'mysql',     # mysql or oracle
+  dbuser      => '$DPM_DB_USER',      # database username
+  dbpass      => '$DPM_DB_PASSWORD',  # database password
+  dbhost      => '`Def $DPM_DB_HOST "localhost"`',      # database host/tns
+  dbmanage    => false,       # if true, creates schema and users
+  active      => 'yes',       # yes or no
+  syncget     => 'no',        # yes or no
+  ulimitn     => 4096,        # ulimit number
+  coredump    => 'no',        # yes or no
+  numfthreads => 20,          # number of fast threads
+  numsthreads => 20           # number of slow threads
+}
+class{'lcgdm::dpm::install':}
+class{'lcgdm::dpm::service':}
+
+#
+# You can define your pools here (example is commented).
+#
+#lcgdm::dpm::pool{'poolname':
+#  def_filesize => '200M'
+#}
+""" > $FILE
+
+if [ "x$DPMPOOL" != "x" ]; then
+echo """
+lcgdm::dpm::pool{'$DPMPOOL':
+  def_filesize => '`Def $DPMFSIZE "200M"`'
+}
+""" >> $FILE
+fi
+echo """
+#
+# Entries in the shift.conf file, you can add in 'host' below the list of
+# machines that the DPM should trust (if any).
+#
+class{'lcgdm::shift::config':}
+lcgdm::shift::trust_entry{'DPM': component => 'DPM' }
+lcgdm::shift::trust_entry{'DPNS': component => 'DPNS' }
+
+# also create trust entries for each of the disk nodes
+#lcgdm::shift::trust_value{'DPM':
+#  component => 'DPM',
+#  host      => 'DISKNODE1'
+#}
+#lcgdm::shift::trust_value{'DPNS':
+#  component => 'DPNS',
+#  host      => 'DISKNODE1'
+#}
+
+#
+# Gridmapfile configuration.
+#
+#class{'lcgdm::mkgridmap::install':}
+#\$groupmap = {
+#  # fill in the groupmap, i.e.
+#  # 'vomss://voms.hellasgrid.gr:8443/voms/dteam?/dteam' => 'dteam'
+#}
+#lcgdm::mkgridmap::file {'lcgdm-mkgridmap':
+#  configfile   => '/etc/lcgdm-mkgridmap.conf',
+#  mapfile      => '/etc/lcgdm-mapfile',
+#  localmapfile => '/etc/lcgdm-mapfile-local',
+#  logfile      => '/var/log/lcgdm-mkgridmap.log',
+#  groupmap     => \$groupmap,
+#  localmap     => {'nobody' => 'nogroup'}
+#}
+
+#
+# Basic dmlite configuration (plugin configuration, ...).
+#
+class{'dmlite':}
+
+#
+# dmlite plugins configuration.
+#
+class{'dmlite::plugins::adapter::config':
+  dpm_host    => '`Def $DPM_HOST "undef"`',
+  ns_host     => '`Def $DPNS_HOST $DPM_HOST`',
+  enable_dpm  => false,
+  enable_ns   => false,
+  enable_io   => false,
+  enable_rfio => true
+}
+class{'dmlite::plugins::adapter::install':}
+
+class{'dmlite::plugins::mysql::config':
+  mysql_host     => '`Def $DPM_DB_HOST "localhost"`',
+  mysql_username => '`Def $DPM_DB_USER "dpmdbuser"`',
+  mysql_password => '`Def $MYSQL_PASSWORD "undef"`',
+  enable_dpm     => true,
+  enable_ns      => true,
+  dpm_db         => '`Def $DPM_DB "dpm_db"`',
+  ns_db          => '`Def $DPNS_DB "cns_db"`',
+}
+class{'dmlite::plugins::mysql::install':}
+
+#
+# Frontends based on dmlite.
+#
+""" >> $FILE
+
+if [ "$DPM_DAV" != "no" ]; then
+    echo """class{'dmlite::dav':}""" >> $FILE
+fi
+
+echo """
+class{'dmlite::nfs':}
+class{'dmlite::srm':}
+class{'dmlite::gridftp':
+    detach              => 1,
+    disable_usage_stats => 1,
+    log_level           => 'ALL',
+    port                => 2811
+}
+
+
+
+# The XrootD configuration is a bit more complicated and
+# the full config (incl. federations) will be explained here:
+# https://svnweb.cern.ch/trac/lcgdm/wiki/Dpm/Xroot/PuppetSetup
+
+#
+# The simplest xrootd configuration.
+#
+class{'xrootd::config':
+  xrootd_user  => '`Def $DPMMGR_USER "dpmmgr"`',
+  xrootd_group => '`Def $DPMMGR_USER "dpmmgr"`'
+}
+\$sharedkey = '32TO64CHARACTERSTRING'
+class{'dmlite::xrootd':
+  nodetype              => [ 'head' ],
+  domain                => '`Def $MY_DOMAIN $(hostname -d)`',
+  dpm_xrootd_serverport => 1095,
+  dpm_xrootd_debug      => true,
+  dpm_xrootd_sharedkey  => '`Def $DPM_XROOTD_SHAREDKEY '$sharedkey'`',
+  dpm_host              => '`Def $DPM_HOST $(hostname)`',
+  ns_host               => '`Def $DPNS_HOST $DPM_HOST`',
+  ns_basepath           => '`Def $DPNS_BASEDIR home`',
+}
+""" >> $FILE
+echo """
+ !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ !!! PLEASE NOTE THAT DOCUMENT WAS GENERATED AUTOMATICALLY !!!
+ !!!               AND YOU NEED TO CHECK IT                !!!
+ !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+"""
+}

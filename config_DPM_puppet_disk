@@ -1,0 +1,155 @@
+#!/bin/bash
+function Def(){
+if [ "x$1x" = "xx" ]; then
+    echo -n "$2"
+else
+    echo -n "$1"
+fi
+}
+
+function config_DPM_puppet_disk(){
+echo -n "Type output filename: "
+read FILE
+[ "x$FILE" == "x" ] && FILE="`/etc/puppet/y2p-dpm-disk.pp`"
+echo "Output file: $FILE"
+echo """
+#
+# This is an example configuration for a DPM Disk Node.
+#
+# You can check the puppet module 'lcgdm' and 'dmlite' for any additional options available.
+# !! Please replace the placeholders for usernames and passwords !!
+#
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+# !!! PLEASE NOTE THAT THIS DOCUMENT WAS GENERATED AUTOMATICALLY !!!
+# !!!               AND YOU NEED TO CHECK IT                     !!!
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+#
+
+Class[Lcgdm::Base::Install] -> Class[Lcgdm::Rfio::Install]
+Class[Lcgdm::Base::Install] -> Class[Dmlite::Plugins::Adapter::Config]
+Class[Dmlite::Plugins::Adapter::Install] ~> Class[Dmlite::Srm::Service]
+Class[Dmlite::Plugins::Adapter::Install] ~> Class[Dmlite::Nfs::Service]
+Class[Dmlite::Plugins::Adapter::Install] ~> Class[Dmlite::Gridftp::Service]
+Class[Dmlite::Plugins::Adapter::Install] ~> Class[Dmlite::Dav::Service]
+
+#
+# The basic lcgdm configuration (these defaults are usually fine).
+#
+class{'lcgdm::base::config':
+    user => '`Def $DPMMGR_USER "dpmmgr"`',
+    uid  => '`Def $DPMMGR_UID 151`',
+    gid  => '`Def $DPMMGR_GID 151`',
+    cert => '`Def $(basename $X509_HOST_CERT) "dpmcert.pem"`',
+    certkey => '`Def $(basename $X509_HOST_KEY) "dpmkey.pem"`',
+}
+class{'lcgdm::base::install':}
+
+#
+# Install the dpns clients
+#
+class{'lcgdm::ns::client':
+  flavor  => 'dpns',
+  dpmhost => '`Def $DPM_DB_HOST $(hostname -f)`'
+}
+
+#
+# You can define your filesystems here (for traditional DPM, example is commented).
+""" > $FILE
+
+for f in $DPM_FILESYSTEMS; do
+server=`echo $f | cut -d: -f1`
+fsname=`echo $f | cut -d: -f2`
+server=`Def $server "undef"`
+fsname=`Def $fsname "undef"`
+echo """
+lcgdm::dpm::filesystem {'$server:$fsname':
+  pool   => '$DPMPOOL',
+  server => '$server',
+  fs     => '$fsname'
+}
+""" >> $FILE
+done
+
+echo """
+#
+# RFIO configuration.
+#
+class{'lcgdm::rfio::config':
+  active       => 'yes',          # yes or no
+  ulimitn      => 4096,           # ulimit number
+  coredump     => 'no',           # yes or no
+  portrange    => '20000 25000',  # start end for ports to be used
+  startoptions => '-sl'           # start options for the daemon
+}
+class{'lcgdm::rfio::install':}
+class{'lcgdm::rfio::service':}
+
+#
+# dmlite plugin configuration.
+class{'dmlite::plugins::adapter::config':
+  ns_host            => '`Def $DPNS_HOST $DPM_HOST`',     # the hostname of the dpns daemon
+  dpm_host           => '`Def $DPM_HOST "undef"`',      # the hostname of the dpm daemon
+  connection_timeout => 10,
+  enable_dpm         => true,
+  enable_ns          => false,
+  enable_io          => false,
+  enable_rfio        => true,
+  enable_pooldriver  => false
+}
+class{'dmlite::plugins::adapter::install':}
+
+#
+# dmlite frontend configuration.
+#
+class{'dmlite::gridftp':
+    detach              => 1,
+    disable_usage_stats => 1,
+    log_level           => 'ALL',
+    port                => 2811
+}
+""" >> $FILE
+
+if [ "$DPM_DAV" != "no" ]; then
+    echo """class{'dmlite::dav':}""" >> $FILE
+fi
+
+echo """
+class{'dmlite::nfs':}
+
+#
+# The simplest xrootd configuration.
+#
+class{'xrootd::config':
+  xrootd_user  => '`Def $DPMMGR_USER "dpmmgr"`',
+  xrootd_group => '`Def $DPMMGR_USER "dpmmgr"`'
+}
+\$sharedkey = '32TO64CHARACTERSTRING'
+class{'dmlite::xrootd':
+  nodetype              => [ 'disk' ],
+  domain                => '`Def $MY_DOMAIN $(hostname -d)`',
+  dpm_xrootd_serverport => 1095,
+  dpm_xrootd_debug      => true,
+  dpm_xrootd_sharedkey  => '`Def $DPM_XROOTD_SHAREDKEY '$sharedkey'`',
+  dpm_host              => '`Def $DPM_HOST $(hostname)`',
+  ns_host               => '`Def $DPNS_HOST $DPM_HOST`',
+  ns_basepath           => '`Def $DPNS_BASEDIR home`',
+}
+
+#
+# Entries in the shift.conf file, you can add in 'host' below the list of
+# machines that RFIO should trust (if any).
+#
+#class{'lcgdm::shift::config':}
+#lcgdm::shift::trust_value{'rfio-trust-localhost':
+#  component => 'RFIOD',
+#  host      => '`hostname -f`',
+#  all       => true
+#}
+""" >> $FILE
+echo """
+ !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ !!! PLEASE NOTE THAT DOCUMENT WAS GENERATED AUTOMATICALLY !!!
+ !!!               AND YOU NEED TO CHECK IT                !!!
+ !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+"""
+}
