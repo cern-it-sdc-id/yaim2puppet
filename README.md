@@ -1,7 +1,7 @@
 yaim2puppet
 ===========
 
-A set of Yaim functions generating DPM puppet manifests from a yaim site-info.def file.
+A set of Yaim functions generating DPM/LFC puppet manifests from a yaim site-info.def file.
 
 The goal of the functions is not to generate a full manifest for the configuration of DPM Head, Node and LFC but to provide an initial puppet manifest preconfigured with YAIM variables.
 
