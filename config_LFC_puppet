@@ -25,9 +25,19 @@ echo """
 
 
 
+Class[Mysql::Server] -> Class[Lcgdm::Ns::Service]
 Class[Lcgdm::Ns::Service] -> Class[Lcgdm::Ns::Client]
-Class[Lcgdm::Ns::Service] -> Class[Dmlite::Plugins::Adapter::Install]
-Class[Dmlite::Plugins::Adapter::Install] ~> Class[Dmlite::Dav::Service]
+Lcgdm::Ns::Domain <| |> -> Lcgdm::Ns::Vo <| |>
+Class[Dmlite::Plugins::Adapter::Install] ~> Class[Dmlite::Dav::Lfc]
+
+
+#
+# MySQL server setup - disable if it is not local
+#
+class{"mysql::server":
+  service_enabled => true,
+  root_password   => '`Def $MYSQL_PASSWORD "undef"`'
+}
 
 #
 # The basic lcgdm configuration (these defaults are usually fine).
@@ -77,15 +87,11 @@ lcgdm::shift::trust_entry{'lfc':
 #
 # Enable the dmlite adapter plugin.
 #
-class{
-  'dmlite::plugins::adapter::config':
-    ns_host                 => '`Def $LFC_DB_HOST $(hostname -f)`',   # the hostname of the lfc daemon
-    connection_timeout      => 10,
-    enable_ns               => true,
-    enable_dpm              => false,
-    enable_io               => false
+class{"dmlite::lfc":
+	dbflavor        => "mysql",
+	dbuser          => '`Def $LFC_DB_USER "USER"`',      # database username
+        dbpass          => '`Def $LFC_DB_PASSWORD "PASSWORD"`',  # database password
 }
-class{'dmlite::plugins::adapter::install':}
 
 #
 # Frontends based on dmlite.

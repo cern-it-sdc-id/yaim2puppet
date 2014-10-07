@@ -26,11 +26,9 @@ echo """
 #
 
 Class[Lcgdm::Base::Install] -> Class[Lcgdm::Rfio::Install]
-Class[Lcgdm::Base::Install] -> Class[Dmlite::Plugins::Adapter::Config]
-Class[Dmlite::Plugins::Adapter::Install] ~> Class[Dmlite::Srm::Service]
-Class[Dmlite::Plugins::Adapter::Install] ~> Class[Dmlite::Nfs::Service]
-Class[Dmlite::Plugins::Adapter::Install] ~> Class[Dmlite::Gridftp::Service]
 Class[Dmlite::Plugins::Adapter::Install] ~> Class[Dmlite::Dav::Service]
+Class[Dmlite::Plugins::Adapter::Install] ~> Class[Dmlite::Gridftp]
+
 
 #
 # The basic lcgdm configuration (these defaults are usually fine).
@@ -84,28 +82,18 @@ class{'lcgdm::rfio::config':
 class{'lcgdm::rfio::install':}
 class{'lcgdm::rfio::service':}
 
-#
-# dmlite plugin configuration.
-class{'dmlite::plugins::adapter::config':
-  ns_host            => '`Def $DPNS_HOST $DPM_HOST`',     # the hostname of the dpns daemon
-  dpm_host           => '`Def $DPM_HOST "undef"`',      # the hostname of the dpm daemon
-  connection_timeout => 10,
-  enable_dpm         => true,
-  enable_ns          => false,
-  enable_io          => false,
-  enable_rfio        => true,
-  enable_pooldriver  => false
-}
-class{'dmlite::plugins::adapter::install':}
 
+class{"dmlite::disk":
+     token_password => '$DMLITE_TOKEN_PASSWORD',
+     dpmhost => '`Def $DPM_HOST "localhost"`',
+     nshost => '`Def $DPM_HOST "localhost"`',
+
+}
 #
 # dmlite frontend configuration.
 #
 class{'dmlite::gridftp':
-    detach              => 1,
-    disable_usage_stats => 1,
-    log_level           => 'ALL',
-    port                => 2811
+ dpmhost             => '`Def $DPM_HOST "localhost"`',
 }
 """ >> $FILE
 
@@ -114,7 +102,6 @@ if [ "$DPM_DAV" != "no" ]; then
 fi
 
 echo """
-class{'dmlite::nfs':}
 
 #
 # The simplest xrootd configuration.
@@ -130,8 +117,6 @@ class{'dmlite::xrootd':
   dpm_xrootd_serverport => 1095,
   dpm_xrootd_debug      => true,
   dpm_xrootd_sharedkey  => '`Def $DPM_XROOTD_SHAREDKEY '$sharedkey'`',
-  dpm_host              => '`Def $DPM_HOST $(hostname)`',
-  ns_host               => '`Def $DPNS_HOST $DPM_HOST`',
   ns_basepath           => '`Def $DPNS_BASEDIR home`',
 }
 
