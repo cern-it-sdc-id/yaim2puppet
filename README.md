@@ -14,9 +14,8 @@ where "function" = config_DPM_puppet_head | config_DPM_puppet_disk | config_LFC_
 config_DPM_puppet_head, config_DPM_puppet_disk, config_LFC_puppet are shell scripts in which puppet variable values are replaced by YAIM variable names.
 
 
-Author 
-
-Grigorii Latyshev
+Authors
 
 grigorii.latyshev@cern.ch 
 
+andrea.manzi@cern.ch
